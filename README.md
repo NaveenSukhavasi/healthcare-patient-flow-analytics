@@ -5,10 +5,10 @@ synthetic emergency department activity at fictional Victorian-style hospitals.
 
 ## Current status
 
-The validated event contract and reproducible arrival generator are implemented.
-The command below writes chronological arrival events and a run manifest.
-Patient records, triage, treatment queues, outcomes, models, API, streaming,
-web interface, and cloud deployment are not yet implemented.
+The validated event contract, reproducible arrival generator, and linked
+synthetic patient generator are implemented. Each run writes `patients.csv`,
+`events.jsonl`, and `manifest.json`. Triage, treatment queues, outcomes,
+models, API, streaming, web interface, and cloud deployment remain planned.
 
 ## Planned capabilities
 
