@@ -1,6 +1,6 @@
 # Emergency Department Data and Event Contract
 
-Status: design specification. No data pipeline has been implemented yet.
+Status: local synthetic patient-flow generator implemented; prediction models and deployment remain planned.
 
 All hospitals, patients, and encounters in this project are synthetic.
 Store event timestamps in UTC. Derive Victorian local time from

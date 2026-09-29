@@ -29,6 +29,7 @@ def test_cli_writes_reproducible_linked_files(tmp_path):
         "events.jsonl",
         "encounters.csv",
         "manifest.json",
+        "arrival_snapshots.csv",
     )
     for filename in filenames:
         assert (first / filename).read_bytes() == (
@@ -37,6 +38,7 @@ def test_cli_writes_reproducible_linked_files(tmp_path):
 
     patients = read_csv(first / "patients.csv")
     encounters = read_csv(first / "encounters.csv")
+    snapshots = read_csv(first / "arrival_snapshots.csv")    
     events = [
         json.loads(line)
         for line in (first / "events.jsonl").read_text(
@@ -54,6 +56,14 @@ def test_cli_writes_reproducible_linked_files(tmp_path):
     assert len(patients) == 20
     assert len(patient_ids) == 20
     assert len(encounters) > 0
+    assert len(snapshots) == len(encounters)
+    assert {row["encounter_id"] for row in snapshots} == encounter_ids
+    assert all(
+        int(row["untriaged_patients"]) >= 0
+        and int(row["waiting_for_treatment"]) >= 0
+        and int(row["in_treatment"]) >= 0
+        for row in snapshots
+    )
     assert len(encounter_ids) == len(encounters)
     assert all(row["patient_id"] in patient_ids for row in encounters)
     assert all(event["patient_id"] in patient_ids for event in events)
@@ -72,6 +82,7 @@ def test_cli_writes_reproducible_linked_files(tmp_path):
     assert manifest["encounter_count"] == len(encounters)
     assert manifest["event_count"] == len(events)
     assert manifest["hospital_count"] == 8
+    assert manifest["snapshot_count"] == len(snapshots)
 
 
 def test_cli_refuses_to_overwrite_a_run(tmp_path):
@@ -86,6 +97,7 @@ def test_cli_refuses_to_overwrite_a_run(tmp_path):
     original_events = (output / "events.jsonl").read_bytes()
     original_patients = (output / "patients.csv").read_bytes()
     original_encounters = (output / "encounters.csv").read_bytes()
+    original_snapshots = (output / "arrival_snapshots.csv").read_bytes()
 
     with pytest.raises(SystemExit):
         main(arguments)
@@ -93,3 +105,4 @@ def test_cli_refuses_to_overwrite_a_run(tmp_path):
     assert (output / "events.jsonl").read_bytes() == original_events
     assert (output / "patients.csv").read_bytes() == original_patients
     assert (output / "encounters.csv").read_bytes() == original_encounters
+    assert (output / "arrival_snapshots.csv").read_bytes() == original_snapshots    

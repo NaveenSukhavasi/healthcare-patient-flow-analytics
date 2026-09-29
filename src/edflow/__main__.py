@@ -10,6 +10,7 @@ from .events import EventType
 from .patients import generate_patients
 from .treatment import simulate_treatment
 from .triage import generate_triage_events
+from .snapshots import build_arrival_snapshots
 
 
 def utc_datetime(value: str) -> datetime:
@@ -84,6 +85,8 @@ def main(argv: list[str] | None = None) -> None:
             event.event_id,
         ),
     )
+    snapshots = build_arrival_snapshots(events)
+
     encounters.sort(key=lambda row: (row["arrival_at"], row["encounter_id"]))
 
     args.output.mkdir(parents=True, exist_ok=False)
@@ -138,7 +141,25 @@ def main(argv: list[str] | None = None) -> None:
         "arrival_count": len(arrivals),
         "encounter_count": len(encounters),
         "event_count": len(events),
+        "snapshot_count": len(snapshots),
     }
+    snapshot_fields = (
+        "encounter_id",
+        "patient_id",
+        "hospital_id",
+        "arrival_at",
+        "untriaged_patients",
+        "waiting_for_treatment",
+        "in_treatment",
+        "arrivals_last_60m",
+        "departures_last_60m",
+    )
+    with (args.output / "arrival_snapshots.csv").open(
+        "w", newline="", encoding="utf-8"
+    ) as handle:
+        writer = csv.DictWriter(handle, fieldnames=snapshot_fields)
+        writer.writeheader()
+        writer.writerows(snapshots)
     (args.output / "manifest.json").write_text(
         json.dumps(manifest, indent=2) + "\n",
         encoding="utf-8",
