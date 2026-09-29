@@ -5,8 +5,10 @@ synthetic emergency department activity at fictional Victorian-style hospitals.
 
 ## Current status
 
-Repository setup only. No data pipeline, model, API, streaming service, web
-application, or cloud infrastructure has been implemented yet.
+The validated event contract and reproducible arrival generator are implemented.
+The command below writes chronological arrival events and a run manifest.
+Patient records, triage, treatment queues, outcomes, models, API, streaming,
+web interface, and cloud deployment are not yet implemented.
 
 ## Planned capabilities
 
