@@ -15,10 +15,21 @@ Arrival snapshots use only events strictly earlier than each arrival.
 The offline training table joins completed outcomes to arrival-known features.
 Its target columns are labels, not predictors.
 
-Offline experiments now cover arrival-time waiting prediction, arrival-time
+Offline experiments cover arrival-time waiting prediction, arrival-time
 admission prediction, post-triage admission prediction, and arrival-time
 four-hour breach prediction. These are evaluations on synthetic data, not
 deployed clinical models.
+
+## Local dashboard
+
+`python -m edflow.dashboard --run <run-directory>` starts a read-only
+dashboard at `http://127.0.0.1:8765/`. It displays run totals, hospital
+KPIs, and daily KPIs with a hospital filter. The server binds to the local
+computer and reads generated files; it does not change them.
+
+The JSON endpoints are `/health`, `/api/manifest`, `/api/hospitals`, and
+`/api/daily`. The daily endpoint accepts an optional `hospital_id` query
+parameter. Press Ctrl+C in the terminal to stop the server.
 
 ## Waiting-time baseline and model
 
@@ -104,11 +115,18 @@ prevalence baseline on four runs, but is worse on seed 202. The gain on
 seed 73 is small. These repeated synthetic runs come from the same
 simulator; they do not establish performance on real hospital data.
 
+## Re-presentation limitation
+
+The generator currently chooses patient IDs independently for each arrival.
+This can produce overlapping visits for one patient and unrealistically high
+apparent seven-day return rates. A re-presentation prediction experiment
+should wait until patient assignment and follow-up are redesigned.
+
 ## Planned capabilities
 
-- Re-presentation model experiments
+- Redesign patient assignment and evaluate seven-day re-presentation
 - Broader historical analytics and model validation
-- Tested API and a usable web interface
+- Expanded dashboard and API
 - Local event streaming and selective, cost-conscious cloud deployment
 
 This is a synthetic portfolio system, not a clinically validated tool or
