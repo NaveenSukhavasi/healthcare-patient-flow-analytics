@@ -15,16 +15,23 @@ Arrival snapshots use only events strictly earlier than each arrival.
 The offline training table joins completed outcomes to arrival-known features.
 Its target columns are labels, not predictors.
 
-## Waiting-time reference baseline
+## Waiting-time baseline and model
 
 `python -m edflow.baseline --run <run-directory>` evaluates global and
 per-hospital median waiting times on a chronological holdout. A training
 label is used only if treatment started before the test period begins.
 
-A 14-day synthetic run (`--hours 336 --patients 1000 --seed 42`) had
-2,270 eligible training rows and 568 test rows. Both baselines achieved
-29.09 minutes mean absolute error. This is a reference score for later
-models, not a clinical performance claim.
+The feature-based model uses only the arrival-time feature allowlist. Its
+encoder and regressor are fitted on eligible training rows, then evaluated
+on the same chronological holdout as the median baselines.
+
+| Seed | Eligible train | Test | Global median MAE | Model MAE |
+| --- | ---: | ---: | ---: | ---: |
+| 42 | 2,270 | 568 | 29.09 min | 23.80 min |
+| 73 | 2,265 | 570 | 18.20 min | 15.41 min |
+
+Both runs used `--hours 336 --patients 1000`. These are synthetic,
+single-split results, not clinical performance claims.
 
 ## Planned capabilities
 
