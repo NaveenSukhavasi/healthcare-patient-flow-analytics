@@ -33,6 +33,20 @@ def test_treatment_respects_capacity_and_completes_encounters():
 
     assert len(events) == 2 * len(arrivals)
     assert len(encounters) == len(arrivals)
+    arrival_by_id = {event.encounter_id: event for event in arrivals}
+    triage_by_id = {event.encounter_id: event for event in triages}
+
+    for row in encounters:
+        encounter_id = row["encounter_id"]
+        assert row["arrival_mode"] == (
+            arrival_by_id[encounter_id].payload["arrival_mode"]
+        )
+        assert row["presentation_group"] == (
+            triage_by_id[encounter_id].payload["presentation_group"]
+        )
+        assert row["admitted_flag"] == int(
+            row["departure_status"] == "admitted"
+        )
 
     active = 0
     for event in events:

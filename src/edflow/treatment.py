@@ -120,6 +120,9 @@ def simulate_treatment(
                     "waiting_time_minutes": round(wait_minutes, 2),
                     "ed_length_of_stay_minutes": round(stay_minutes, 2),
                     "four_hour_breach": int(stay_minutes > 240),
+                    "arrival_mode": arrival.payload["arrival_mode"],
+                    "presentation_group": triage.payload["presentation_group"],
+                    "admitted_flag": int(event.payload["departure_status"] == "admitted"),
                 })
 
         for hospital_id in sorted(changed_hospitals):
