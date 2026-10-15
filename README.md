@@ -5,21 +5,31 @@ synthetic emergency department activity at fictional Victorian-style hospitals.
 
 ## Current status
 
-The local synthetic generator now produces linked patient records, arrival,
-triage, treatment-start, and departure events across eight fictional hospitals.
-Treatment uses finite ED capacity. Each run writes `patients.csv`, `hospital_kpis.csv`,  `hospital_daily_kpis.csv` , `events.jsonl`, `encounters.csv`, `arrival_snapshots.csv`, and `manifest.json`.
+The local generator produces linked patient, arrival, triage, treatment-start,
+and departure records across eight fictional hospitals. Treatment uses finite
+ED capacity. Each run writes `patients.csv`, `events.jsonl`, `encounters.csv`,
+`arrival_snapshots.csv`, `arrival_training.csv`, `hospital_kpis.csv`,
+`hospital_daily_kpis.csv`, and `manifest.json`.
 
 Arrival snapshots use only events strictly earlier than each arrival.
-Prediction models, API, streaming, web interface, and cloud deployment remain
-planned.
+The offline training table joins completed outcomes to arrival-known features.
+Its target columns are labels, not predictors.
 
-The offline training table joins completed outcomes to features available at arrival; target columns are labels, not predictors.
+## Waiting-time reference baseline
+
+`python -m edflow.baseline --run <run-directory>` evaluates global and
+per-hospital median waiting times on a chronological holdout. A training
+label is used only if treatment started before the test period begins.
+
+A 14-day synthetic run (`--hours 336 --patients 1000 --seed 42`) had
+2,270 eligible training rows and 568 test rows. Both baselines achieved
+29.09 minutes mean absolute error. This is a reference score for later
+models, not a clinical performance claim.
 
 ## Planned capabilities
 
-- Reproducible patient-flow simulation and historical analytics
-- Arrival-time operational features with checks against data leakage
-- Waiting-time, admission, breach-risk, and re-presentation modelling
+- Feature-based waiting-time, admission, breach-risk, and re-presentation models
+- Broader historical analytics and model validation
 - Tested API and a usable web interface
 - Local event streaming and selective, cost-conscious cloud deployment
 
