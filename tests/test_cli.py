@@ -5,6 +5,7 @@ from collections import Counter
 import pytest
 
 from edflow.__main__ import main
+from edflow.model_data import FEATURE_COLUMNS, TARGET_COLUMNS
 
 
 def read_csv(path):
@@ -32,6 +33,7 @@ def test_cli_writes_reproducible_linked_files(tmp_path):
         "arrival_snapshots.csv",
         "hospital_kpis.csv",
         "hospital_daily_kpis.csv",
+        "arrival_training.csv",
     )
     for filename in filenames:
         assert (first / filename).read_bytes() == (
@@ -40,7 +42,8 @@ def test_cli_writes_reproducible_linked_files(tmp_path):
 
     patients = read_csv(first / "patients.csv")
     encounters = read_csv(first / "encounters.csv")
-    snapshots = read_csv(first / "arrival_snapshots.csv")    
+    snapshots = read_csv(first / "arrival_snapshots.csv")
+    training_rows = read_csv(first / "arrival_training.csv")
     hospital_kpis = read_csv(first / "hospital_kpis.csv")
     daily_kpis = read_csv(first / "hospital_daily_kpis.csv")
     events = [
@@ -78,12 +81,7 @@ def test_cli_writes_reproducible_linked_files(tmp_path):
     assert all(event["patient_id"] in patient_ids for event in events)
     assert all(event["encounter_id"] in encounter_ids for event in events)
 
-    for event_type in (
-        "arrival",
-        "triage_completed",
-        "treatment_started",
-        "departure",
-    ):
+    for event_type in ("arrival","triage_completed","treatment_started","departure",):
         assert event_counts[event_type] == len(encounters)
 
     assert manifest["patient_count"] == 20
@@ -92,6 +90,10 @@ def test_cli_writes_reproducible_linked_files(tmp_path):
     assert manifest["event_count"] == len(events)
     assert manifest["hospital_count"] == 8
     assert manifest["snapshot_count"] == len(snapshots)
+    assert len(training_rows) == len(encounters)
+    assert {row["encounter_id"] for row in training_rows} == encounter_ids
+    assert tuple(training_rows[0]) == ("encounter_id", "arrival_at", *FEATURE_COLUMNS, *TARGET_COLUMNS)
+    assert manifest["training_row_count"] == len(training_rows)
 
 
 def test_cli_refuses_to_overwrite_a_run(tmp_path):

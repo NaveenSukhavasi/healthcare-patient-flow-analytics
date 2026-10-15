@@ -12,6 +12,7 @@ from .treatment import simulate_treatment
 from .triage import generate_triage_events
 from .snapshots import build_arrival_snapshots
 from .analytics import build_hospital_kpis
+from .model_data import (FEATURE_COLUMNS,TARGET_COLUMNS,build_arrival_training_rows,)
 
 
 def utc_datetime(value: str) -> datetime:
@@ -92,6 +93,8 @@ def main(argv: list[str] | None = None) -> None:
 
     hospital_kpis, daily_kpis = build_hospital_kpis(encounters)
 
+    training_rows = build_arrival_training_rows(encounters,snapshots,[patient.to_record() for patient in patients],)
+
     args.output.mkdir(parents=True, exist_ok=False)
 
     with (args.output / "patients.csv").open(
@@ -158,6 +161,13 @@ def main(argv: list[str] | None = None) -> None:
             writer.writeheader()
             writer.writerows(rows)
 
+    training_fields = ("encounter_id","arrival_at",*FEATURE_COLUMNS,*TARGET_COLUMNS,)
+
+    with (args.output / "arrival_training.csv").open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=training_fields)
+        writer.writeheader()
+        writer.writerows(training_rows)
+
     manifest = {
         "start_at": args.start.isoformat(),
         "hours": args.hours,
@@ -174,6 +184,7 @@ def main(argv: list[str] | None = None) -> None:
         "snapshot_count": len(snapshots),
         "hospital_kpi_count": len(hospital_kpis),
         "daily_kpi_count": len(daily_kpis),
+        "training_row_count": len(training_rows),
     }
     snapshot_fields = (
         "encounter_id",

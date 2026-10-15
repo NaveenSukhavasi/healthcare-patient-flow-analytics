@@ -8,9 +8,12 @@ synthetic emergency department activity at fictional Victorian-style hospitals.
 The local synthetic generator now produces linked patient records, arrival,
 triage, treatment-start, and departure events across eight fictional hospitals.
 Treatment uses finite ED capacity. Each run writes `patients.csv`, `hospital_kpis.csv`,  `hospital_daily_kpis.csv` , `events.jsonl`, `encounters.csv`, `arrival_snapshots.csv`, and `manifest.json`.
+
 Arrival snapshots use only events strictly earlier than each arrival.
 Prediction models, API, streaming, web interface, and cloud deployment remain
 planned.
+
+The offline training table joins completed outcomes to features available at arrival; target columns are labels, not predictors.
 
 ## Planned capabilities
 
