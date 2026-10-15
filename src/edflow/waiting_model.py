@@ -11,6 +11,7 @@ from sklearn.pipeline import Pipeline
 
 from .baseline import evaluate_waiting_time_baselines
 from .model_data import FEATURE_COLUMNS
+from collections import defaultdict
 
 
 CATEGORICAL_COLUMNS = {"hospital_id", "arrival_mode"}
@@ -22,6 +23,26 @@ def arrival_features(row) -> dict:
         for name in FEATURE_COLUMNS
     }
 
+def _group_error_report(rows, actual, predictions, baseline_minutes, column):
+    grouped = defaultdict(list)
+    for row, truth, prediction in zip(rows, actual, predictions):
+        grouped[row[column]].append((
+            abs(truth - prediction),
+            abs(truth - baseline_minutes),
+        ))
+
+    return {
+        name: {
+            "count": len(errors),
+            "model_mae_minutes": round(
+                sum(model_error for model_error, _ in errors) / len(errors), 2
+            ),
+            "global_median_mae_minutes": round(
+                sum(baseline_error for _, baseline_error in errors) / len(errors), 2
+            ),
+        }
+        for name, errors in sorted(grouped.items())
+    }
 
 def evaluate_waiting_time_model(training_rows, encounters) -> dict:
     training_rows = list(training_rows)
@@ -76,6 +97,11 @@ def evaluate_waiting_time_model(training_rows, encounters) -> dict:
         "model_mae_minutes": round(
             float(mean_absolute_error(actual, predictions)), 2
         ),
+
+        "by_hospital": _group_error_report(
+            test, actual, predictions, report["global_median_minutes"], "hospital_id"),
+        "by_arrival_mode": _group_error_report(
+            test, actual, predictions, report["global_median_minutes"], "arrival_mode"),
     }
 
 

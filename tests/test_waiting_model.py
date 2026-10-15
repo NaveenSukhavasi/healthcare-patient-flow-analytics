@@ -49,3 +49,5 @@ def test_model_evaluates_generated_run(tmp_path):
         == len(training_rows)
     )
     assert report["model_mae_minutes"] >= 0
+    assert sum(group["count"] for group in report["by_arrival_mode"].values()) == report["test_rows"]
+    assert sum(group["count"] for group in report["by_hospital"].values()) == report["test_rows"]

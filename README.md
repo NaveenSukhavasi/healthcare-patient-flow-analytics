@@ -33,6 +33,12 @@ on the same chronological holdout as the median baselines.
 Both runs used `--hours 336 --patients 1000`. These are synthetic,
 single-split results, not clinical performance claims.
 
+Subgroup diagnostics by hospital and arrival mode are included in the model
+report. The model improves overall MAE on both runs, but some hospital groups
+are slightly worse than the global median. Seed 42's H03 group retains a high
+62.97-minute MAE despite improving on its 79.67-minute baseline. These
+synthetic subgroup results are exploratory.
+
 ## Planned capabilities
 
 - Feature-based waiting-time, admission, breach-risk, and re-presentation models
