@@ -1,7 +1,8 @@
 # Emergency Department Data and Event Contract
 
-Status: local synthetic patient-flow generator and offline waiting-time and
-admission prediction experiments implemented; deployment remains planned.
+Status: local synthetic patient-flow generator and offline waiting-time,
+admission, and four-hour breach prediction experiments implemented;
+deployment remains planned.
 
 All hospitals, patients, and encounters in this project are synthetic.
 Store event timestamps in UTC. Derive Victorian local time from
@@ -61,14 +62,15 @@ become available only at departure.
 
 ### At arrival
 
-Waiting-time and admission experiments use only information available at
-or before arrival: patient history known then, arrival mode, hospital,
-calendar features, and hospital workload calculated from earlier events.
-Four-hour breach prediction is planned.
+Waiting-time, admission, and four-hour breach experiments use only
+information available at or before arrival: patient history known then,
+arrival mode, hospital, calendar features, and hospital workload calculated
+from earlier events.
 
 The arrival snapshot is recorded before the new arrival changes the
 hospital's workload counts. It must not contain triage category,
-treatment start, departure, admission outcome, or future activity.
+treatment start, departure, admission outcome, breach outcome, or future
+activity.
 
 ### After triage
 

@@ -16,8 +16,9 @@ The offline training table joins completed outcomes to arrival-known features.
 Its target columns are labels, not predictors.
 
 Offline experiments now cover arrival-time waiting prediction, arrival-time
-admission prediction, and post-triage admission prediction. These are
-evaluations on synthetic data, not deployed clinical models.
+admission prediction, post-triage admission prediction, and arrival-time
+four-hour breach prediction. These are evaluations on synthetic data, not
+deployed clinical models.
 
 ## Waiting-time baseline and model
 
@@ -81,9 +82,31 @@ and 101. The rounded seed 202 scores do not establish which is better.
 Both post-triage approaches improve on prevalence in these synthetic runs.
 More validation is needed before selecting a preferred model.
 
+## Four-hour breach prediction experiment
+
+A four-hour breach means the encounter's arrival-to-departure time exceeds
+240 minutes. The arrival-time baseline predicts the breach rate among
+eligible training encounters. A histogram gradient boosting classifier uses
+only arrival-known features. Both are scored on the same chronological
+holdout using Brier score. A training encounter is eligible only if its
+departure outcome was known before the holdout begins.
+
+| Seed | Eligible train | Test | Test breach rate | Baseline Brier | Model Brier |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 42 | 2,249 | 568 | 0.4613 | 0.2534 | 0.2170 |
+| 73 | 2,237 | 570 | 0.4070 | 0.2414 | 0.2382 |
+| 13 | 2,224 | 566 | 0.4470 | 0.2484 | 0.2198 |
+| 101 | 2,274 | 578 | 0.4308 | 0.2467 | 0.2270 |
+| 202 | 2,268 | 575 | 0.3843 | 0.2381 | 0.2425 |
+
+All five runs used `--hours 336 --patients 1000`. The model beats the
+prevalence baseline on four runs, but is worse on seed 202. The gain on
+seed 73 is small. These repeated synthetic runs come from the same
+simulator; they do not establish performance on real hospital data.
+
 ## Planned capabilities
 
-- Four-hour breach-risk and re-presentation model experiments
+- Re-presentation model experiments
 - Broader historical analytics and model validation
 - Tested API and a usable web interface
 - Local event streaming and selective, cost-conscious cloud deployment
