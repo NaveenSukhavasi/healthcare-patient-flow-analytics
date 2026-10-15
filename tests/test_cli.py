@@ -30,6 +30,8 @@ def test_cli_writes_reproducible_linked_files(tmp_path):
         "encounters.csv",
         "manifest.json",
         "arrival_snapshots.csv",
+        "hospital_kpis.csv",
+        "hospital_daily_kpis.csv",
     )
     for filename in filenames:
         assert (first / filename).read_bytes() == (
@@ -39,6 +41,8 @@ def test_cli_writes_reproducible_linked_files(tmp_path):
     patients = read_csv(first / "patients.csv")
     encounters = read_csv(first / "encounters.csv")
     snapshots = read_csv(first / "arrival_snapshots.csv")    
+    hospital_kpis = read_csv(first / "hospital_kpis.csv")
+    daily_kpis = read_csv(first / "hospital_daily_kpis.csv")
     events = [
         json.loads(line)
         for line in (first / "events.jsonl").read_text(
@@ -65,6 +69,11 @@ def test_cli_writes_reproducible_linked_files(tmp_path):
         for row in snapshots
     )
     assert len(encounter_ids) == len(encounters)
+    assert sum(int(row["presentation_count"]) for row in hospital_kpis) == len(encounters)
+    assert sum(int(row["presentation_count"]) for row in daily_kpis) == len(encounters)
+    assert {row["hospital_id"] for row in hospital_kpis} == {row["hospital_id"]for row in encounters}
+    assert manifest["hospital_kpi_count"] == len(hospital_kpis)
+    assert manifest["daily_kpi_count"] == len(daily_kpis)
     assert all(row["patient_id"] in patient_ids for row in encounters)
     assert all(event["patient_id"] in patient_ids for event in events)
     assert all(event["encounter_id"] in encounter_ids for event in events)

@@ -11,6 +11,7 @@ from .patients import generate_patients
 from .treatment import simulate_treatment
 from .triage import generate_triage_events
 from .snapshots import build_arrival_snapshots
+from .analytics import build_hospital_kpis
 
 
 def utc_datetime(value: str) -> datetime:
@@ -89,6 +90,8 @@ def main(argv: list[str] | None = None) -> None:
 
     encounters.sort(key=lambda row: (row["arrival_at"], row["encounter_id"]))
 
+    hospital_kpis, daily_kpis = build_hospital_kpis(encounters)
+
     args.output.mkdir(parents=True, exist_ok=False)
 
     with (args.output / "patients.csv").open(
@@ -131,6 +134,30 @@ def main(argv: list[str] | None = None) -> None:
         writer.writeheader()
         writer.writerows(encounters)
 
+    hospital_fields = (
+        "hospital_id",
+        "presentation_count",
+        "median_waiting_time_minutes",
+        "median_ed_length_of_stay_minutes",
+        "four_hour_completion_rate",
+        "admission_rate",
+    )
+    daily_fields = (
+        "hospital_id",
+        "arrival_date_utc",
+        *hospital_fields[1:],
+    )
+    for filename, fields, rows in (
+        ("hospital_kpis.csv", hospital_fields, hospital_kpis),
+        ("hospital_daily_kpis.csv", daily_fields, daily_kpis),
+    ):
+        with (args.output / filename).open(
+            "w", newline="", encoding="utf-8"
+        ) as handle:
+            writer = csv.DictWriter(handle, fieldnames=fields)
+            writer.writeheader()
+            writer.writerows(rows)
+
     manifest = {
         "start_at": args.start.isoformat(),
         "hours": args.hours,
@@ -145,6 +172,8 @@ def main(argv: list[str] | None = None) -> None:
         "encounter_count": len(encounters),
         "event_count": len(events),
         "snapshot_count": len(snapshots),
+        "hospital_kpi_count": len(hospital_kpis),
+        "daily_kpi_count": len(daily_kpis),
     }
     snapshot_fields = (
         "encounter_id",
