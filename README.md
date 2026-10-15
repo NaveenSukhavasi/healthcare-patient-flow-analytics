@@ -115,12 +115,34 @@ prevalence baseline on four runs, but is worse on seed 202. The gain on
 seed 73 is small. These repeated synthetic runs come from the same
 simulator; they do not establish performance on real hospital data.
 
-## Re-presentation limitation
+## Re-presentation data-quality audit
 
-The generator currently chooses patient IDs independently for each arrival.
-This can produce overlapping visits for one patient and unrealistically high
-apparent seven-day return rates. A re-presentation prediction experiment
-should wait until patient assignment and follow-up are redesigned.
+`python -m edflow.representation_audit --run <run-directory>` reports
+overlapping arrivals for the same patient and apparent seven-day returns.
+A follow-up is eligible only when the encounter's departure is at least
+seven days before the observation window ends. Later arrivals are counted
+only when they occur after departure and within seven days.
+
+| Seed | Patient pool | Encounters | Overlaps | Eligible follow-ups | Apparent returns | Apparent return rate |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 42 | 1,000 | 2,838 | 104 | 1,405 | 1,077 | 76.65% |
+| 73 | 1,000 | 2,850 | 85 | 1,356 | 1,053 | 77.65% |
+| 42 | 40,000 | 2,893 | 2 | 1,420 | 50 | 3.52% |
+| 73 | 40,000 | 2,832 | 6 | 1,366 | 52 | 3.81% |
+
+All four runs cover 336 hours. The generator currently chooses patient IDs
+independently for each arrival. A small patient pool causes frequent ID
+reuse and overlapping visits. A larger pool sharply reduces both, but it
+still produces overlaps. These rates are artifacts of the generator and
+must not be presented as clinically meaningful return rates.
+
+Before building a re-presentation prediction model, patient assignment
+must prevent a new visit while the same patient is still in an encounter.
+A return process should explicitly schedule later visits after departure
+rather than relying on random ID reuse. It must remain reproducible from
+recorded seeds, and labels must exclude encounters without a full seven-day
+follow-up window. Changing the generator will also require rerunning the
+earlier model benchmarks.
 
 ## Planned capabilities
 
