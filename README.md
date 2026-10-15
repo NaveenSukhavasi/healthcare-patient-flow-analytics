@@ -15,6 +15,10 @@ Arrival snapshots use only events strictly earlier than each arrival.
 The offline training table joins completed outcomes to arrival-known features.
 Its target columns are labels, not predictors.
 
+Offline experiments now cover arrival-time waiting prediction, arrival-time
+admission prediction, and post-triage admission prediction. These are
+evaluations on synthetic data, not deployed clinical models.
+
 ## Waiting-time baseline and model
 
 `python -m edflow.baseline --run <run-directory>` evaluates global and
@@ -39,25 +43,47 @@ are slightly worse than the global median. Seed 42's H03 group retains a high
 62.97-minute MAE despite improving on its 79.67-minute baseline. These
 synthetic subgroup results are exploratory.
 
-## Admission prediction experiment
+## Admission prediction experiments
 
-An arrival-time admission classifier was evaluated against the training-set
-admission rate on the same chronological holdout. Encounters whose departure
-outcome was unavailable at the split were excluded from training.
+At arrival, an admission classifier was compared with a baseline that predicts
+the training-set admission rate. Both were evaluated on a chronological
+holdout. Encounters whose departure outcome was unavailable at the split were
+excluded from training.
 
-| Seed | Eligible train | Test | Prevalence baseline Brier | Model Brier |
+| Seed | Eligible train | Test | Prevalence Brier | Arrival model Brier |
 | --- | ---: | ---: | ---: | ---: |
 | 42 | 2,249 | 568 | 0.2429 | 0.2555 |
 | 73 | 2,237 | 570 | 0.2366 | 0.2470 |
 
 Lower Brier scores are better. The arrival-time model did not beat the
-prevalence baseline on either synthetic run. Triage category, a strong
-driver of admission in the simulator, is unavailable at arrival; a later
-post-triage prediction is the next experiment.
+prevalence baseline on either of these synthetic runs. Triage category is
+unavailable at arrival, so it is not used by that model.
+
+A separate post-triage experiment compares the prevalence baseline, an
+admission-rate baseline for each triage category, and a regularized logistic
+regression using arrival-known features plus triage category. All three use
+the same chronological holdout. Training uses only admission outcomes known
+before the holdout begins.
+
+| Seed | Eligible train | Test | Prevalence Brier | Category Brier | Logistic Brier |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 42 | 2,249 | 568 | 0.2429 | 0.2041 | 0.2044 |
+| 73 | 2,237 | 570 | 0.2366 | 0.1749 | 0.1800 |
+| 13 | 2,224 | 566 | ~0.24 | ~0.19 | ~0.18 |
+| 101 | 2,274 | 578 | ~0.23 | ~0.19 | ~0.18 |
+| 202 | 2,268 | 575 | ~0.24 | ~0.19 | ~0.19 |
+
+All five runs used `--hours 336 --patients 1000`. Values marked `~` were
+copied from a PowerShell table that displayed two decimal places. The
+category baseline narrowly beats logistic regression on seeds 42 and 73;
+logistic regression appears better at the displayed precision on seeds 13
+and 101. The rounded seed 202 scores do not establish which is better.
+Both post-triage approaches improve on prevalence in these synthetic runs.
+More validation is needed before selecting a preferred model.
 
 ## Planned capabilities
 
-- Post-triage admission, breach-risk, and re-presentation model experiments
+- Four-hour breach-risk and re-presentation model experiments
 - Broader historical analytics and model validation
 - Tested API and a usable web interface
 - Local event streaming and selective, cost-conscious cloud deployment

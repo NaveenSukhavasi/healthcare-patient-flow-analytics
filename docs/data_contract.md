@@ -1,6 +1,7 @@
 # Emergency Department Data and Event Contract
 
-Status: local synthetic patient-flow generator implemented; prediction models and deployment remain planned.
+Status: local synthetic patient-flow generator and offline waiting-time and
+admission prediction experiments implemented; deployment remains planned.
 
 All hospitals, patients, and encounters in this project are synthetic.
 Store event timestamps in UTC. Derive Victorian local time from
@@ -9,6 +10,7 @@ Australia/Melbourne when needed for reporting or features.
 ## Core records
 
 ### Hospital
+
 - hospital_id: stable unique ID
 - hospital_name: fictional name
 - region: metropolitan, regional, or rural
@@ -19,6 +21,7 @@ Australia/Melbourne when needed for reporting or features.
 Hospital beds and ED treatment spaces are different measures.
 
 ### Patient
+
 - patient_id: stable synthetic ID
 - demographic fields: sex, Indigenous status, socioeconomic quintile,
   and remoteness for later cohort analysis
@@ -28,6 +31,7 @@ Age is calculated at each encounter, rather than stored as a permanent
 patient attribute.
 
 ### Encounter
+
 - encounter_id, patient_id, hospital_id
 - arrival_at, arrival_mode
 - triage_at, triage_category, presentation_group
@@ -56,18 +60,22 @@ become available only at departure.
 ## Prediction cutoffs
 
 ### At arrival
-The first waiting-time, admission, and four-hour breach predictions use
-only information available at or before arrival: patient history known
-then, arrival mode, hospital, calendar features, and hospital workload
-calculated from earlier events.
+
+Waiting-time and admission experiments use only information available at
+or before arrival: patient history known then, arrival mode, hospital,
+calendar features, and hospital workload calculated from earlier events.
+Four-hour breach prediction is planned.
 
 The arrival snapshot is recorded before the new arrival changes the
 hospital's workload counts. It must not contain triage category,
 treatment start, departure, admission outcome, or future activity.
 
 ### After triage
-A separate future prediction may use triage category. Its target should
-be clearly defined, for example remaining time until treatment starts.
+
+The post-triage admission experiment may use triage category together
+with arrival-known features. It predicts the eventual admission outcome,
+which is available only after departure. Triage category must not be
+treated as an arrival-time feature.
 
 ## Labels and validation
 
@@ -78,6 +86,10 @@ be clearly defined, for example remaining time until treatment starts.
 - seven_day_representation requires a later encounter for the same patient;
   encounters without a full seven-day observation window cannot be labelled
   as confirmed non-representations
+
+Chronological evaluations may train only on labels available before the
+test period begins. The encoder, scaler, and model must be fitted on eligible
+training rows, never on the test rows.
 
 IDs must be unique where required, references must exist, timestamps
 must follow event order, and durations and workload counts cannot be
