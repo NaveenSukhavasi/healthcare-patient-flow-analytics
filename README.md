@@ -39,9 +39,25 @@ are slightly worse than the global median. Seed 42's H03 group retains a high
 62.97-minute MAE despite improving on its 79.67-minute baseline. These
 synthetic subgroup results are exploratory.
 
+## Admission prediction experiment
+
+An arrival-time admission classifier was evaluated against the training-set
+admission rate on the same chronological holdout. Encounters whose departure
+outcome was unavailable at the split were excluded from training.
+
+| Seed | Eligible train | Test | Prevalence baseline Brier | Model Brier |
+| --- | ---: | ---: | ---: | ---: |
+| 42 | 2,249 | 568 | 0.2429 | 0.2555 |
+| 73 | 2,237 | 570 | 0.2366 | 0.2470 |
+
+Lower Brier scores are better. The arrival-time model did not beat the
+prevalence baseline on either synthetic run. Triage category, a strong
+driver of admission in the simulator, is unavailable at arrival; a later
+post-triage prediction is the next experiment.
+
 ## Planned capabilities
 
-- Feature-based waiting-time, admission, breach-risk, and re-presentation models
+- Post-triage admission, breach-risk, and re-presentation model experiments
 - Broader historical analytics and model validation
 - Tested API and a usable web interface
 - Local event streaming and selective, cost-conscious cloud deployment
