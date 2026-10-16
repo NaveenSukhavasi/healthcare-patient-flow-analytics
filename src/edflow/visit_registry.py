@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
+from math import isfinite
 from random import Random
-from typing import Sequence
+from typing import Mapping, Sequence
 
 
 RETURN_WINDOW = timedelta(days=7)
@@ -15,6 +16,7 @@ class VisitRegistry:
         *,
         seed: int,
         return_probability: float,
+        return_weights: Mapping[str, float] | None = None,
     ) -> None:
         ids = tuple(patient_ids)
         if not ids or any(not isinstance(pid, str) or not pid.strip() for pid in ids):
@@ -24,11 +26,25 @@ class VisitRegistry:
         if not 0 <= return_probability <= 1:
             raise ValueError("return_probability must be between 0 and 1")
 
+        if return_weights is not None:
+            if set(return_weights) != set(ids):
+                raise ValueError("return weights must cover all patient IDs")
+            if any(
+                not isinstance(weight, (int, float))
+                or not isfinite(weight)
+                or weight <= 0
+                for weight in return_weights.values()
+            ):
+                raise ValueError("return weights must be positive finite numbers")
+
         self._rng = Random(seed)
         self._new_patients = list(ids)
         self._active: dict[str, datetime] = {}
         self._discharged: dict[str, datetime] = {}
         self._return_probability = return_probability
+        self._return_weights = (
+            dict(return_weights) if return_weights is not None else None
+        )
         self._last_event_at: datetime | None = None
 
     def _check_time(self, occurred_at: datetime) -> None:
@@ -50,14 +66,22 @@ class VisitRegistry:
             for patient_id, departed_at in self._discharged.items()
             if departed_at < arrival_at <= departed_at + RETURN_WINDOW
         )
-
         choose_return = (
             bool(eligible_returns)
             and self._rng.random() < self._return_probability
         )
 
         if choose_return:
-            patient_id = self._rng.choice(eligible_returns)
+            if self._return_weights is None:
+                patient_id = self._rng.choice(eligible_returns)
+            else:
+                patient_id = self._rng.choices(
+                    eligible_returns,
+                    weights=[
+                        self._return_weights[pid] for pid in eligible_returns
+                    ],
+                    k=1,
+                )[0]
             del self._discharged[patient_id]
         elif self._new_patients:
             index = self._rng.randrange(len(self._new_patients))

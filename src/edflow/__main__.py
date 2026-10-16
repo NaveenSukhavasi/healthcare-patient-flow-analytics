@@ -47,7 +47,10 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--generator-version", type=int, choices=(1, 2), default=1)
     parser.add_argument("--return-probability", type=float, default=0.1)
+    parser.add_argument("--return-risk-weighting", action="store_true")
     args = parser.parse_args(argv)
+    if args.return_risk_weighting and args.generator_version != 2:
+        parser.error("--return-risk-weighting requires --generator-version 2")
 
     if args.hours < 1 or args.patients < 1:
         parser.error("hours and patients must be positive")
@@ -107,6 +110,7 @@ def main(argv: list[str] | None = None) -> None:
             DEFAULT_HOSPITALS,
             seed=args.seed,
             return_probability=args.return_probability,
+            return_risk_weighting=args.return_risk_weighting,
         )
         arrivals = [
             event for event in events
@@ -224,6 +228,8 @@ def main(argv: list[str] | None = None) -> None:
                 - len({row["patient_id"] for row in encounters})
             ),
         })
+    if args.return_risk_weighting:
+        manifest["return_selection"] = "chronic_condition_weighted_v1"
     snapshot_fields = (
         "encounter_id",
         "patient_id",

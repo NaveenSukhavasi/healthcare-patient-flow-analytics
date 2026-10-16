@@ -19,6 +19,7 @@ def generate_event_stream_v2(
     *,
     seed: int,
     return_probability: float,
+    return_risk_weighting: bool = False,
 ) -> list[EDEvent]:
     """Process arrival slots, triage and departures in chronological order."""
     slots = tuple(slots)
@@ -51,6 +52,14 @@ def generate_event_stream_v2(
         tuple(patient.patient_id for patient in patients),
         seed=seed + 1,
         return_probability=return_probability,
+        return_weights=(
+            {
+                patient.patient_id: 1.0 + 2.0 * patient.chronic_condition_count
+                for patient in patients
+            }
+            if return_risk_weighting
+            else None
+        ),
     )
     triage_sampler = TriageSampler(seed=seed + 2)
     outcome_sampler = TreatmentOutcomeSampler(seed=seed + 3)
