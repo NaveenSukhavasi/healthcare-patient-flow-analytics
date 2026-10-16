@@ -1,24 +1,71 @@
 # Intelligent Emergency Department Patient Flow Platform
 
 A software engineering and data science portfolio project built around fully
-synthetic emergency department activity at fictional Victorian-style hospitals.
+synthetic emergency department (ED) activity at eight fictional
+Victorian-style hospitals. This is not a clinically validated tool or medical
+advice.
 
 ## Current status
 
-The local generator produces linked patient, arrival, triage, treatment-start,
-and departure records across eight fictional hospitals. Treatment uses finite
-ED capacity. Each run writes `patients.csv`, `events.jsonl`, `encounters.csv`,
-`arrival_snapshots.csv`, `arrival_training.csv`, `hospital_kpis.csv`,
-`hospital_daily_kpis.csv`, and `manifest.json`.
+The project generates linked patient, arrival, triage, treatment-start, and
+departure records. Treatment uses finite ED capacity. Each run writes
+`patients.csv`, `events.jsonl`, `encounters.csv`, `arrival_snapshots.csv`,
+`arrival_training.csv`, `hospital_kpis.csv`, `hospital_daily_kpis.csv`, and
+`manifest.json`.
 
-Arrival snapshots use only events strictly earlier than each arrival.
-The offline training table joins completed outcomes to arrival-known features.
+There are two generator versions:
+
+- **Version 1 is the default.** It independently chooses a patient ID for
+  each arrival. This preserves the data used for the existing waiting-time,
+  admission, and four-hour breach experiments, but can produce overlapping
+  visits and misleading apparent return rates.
+- **Version 2 is opt-in** with `--generator-version 2`. It assigns patients
+  through a visit registry, permits intentional returns only after ED
+  departure, and prevents a patient from having overlapping ED encounters.
+
+The manifest records the generator version. For version 2, it also records
+the return probability per arrival slot, return window, and number of
+repeated visits. Existing model benchmarks have **not** been rerun on
+version-two data.
+
+Arrival snapshots use only events strictly earlier than each arrival. The
+offline training table joins completed outcomes to arrival-known features.
 Its target columns are labels, not predictors.
 
-Offline experiments cover arrival-time waiting prediction, arrival-time
-admission prediction, post-triage admission prediction, and arrival-time
-four-hour breach prediction. These are evaluations on synthetic data, not
-deployed clinical models.
+## Generate and audit a version-two run
+
+From the project folder in PowerShell, using the existing virtual
+environment:
+
+```powershell
+$env:PYTHONPATH = (Resolve-Path .\src).Path
+$v2Run = "data/generated/flow-v2-14d-$(Get-Date -Format yyyyMMdd-HHmmss)"
+
+.\.venv\Scripts\python.exe -m edflow --output $v2Run --start 2025-01-01T00:00:00+00:00 --hours 336 --patients 40000 --seed 42 --generator-version 2 --return-probability 0.1
+.\.venv\Scripts\python.exe -m edflow.representation_audit --run $v2Run
+```
+
+The output directory must be new for each run. Omitting
+`--generator-version 2` selects the original version-one generator.
+
+The 14-day version-two run above produced 2,839 encounters and 11,356
+events. Its audit found:
+
+| Measure | Result |
+| --- | ---: |
+| Patients with encounters | 2,546 |
+| Overlapping arrivals | 0 |
+| Eligible discharged seven-day follow-ups | 873 |
+| Censored discharged follow-ups | 896 |
+| Admitted ED departures excluded as index visits | 1,070 |
+| Apparent seven-day returns among eligible visits | 217 |
+| Apparent return rate among eligible visits | 24.86% |
+
+The eligible, censored, and admitted groups add up to all 2,839
+encounters. The manifest reports 293 repeated visits across the full run;
+that is a different measure from the 217 eligible seven-day returns. The
+synthetic return process is a generator setting, not a calibrated estimate
+of patient risk. No re-presentation prediction model has been evaluated yet.
 
 ## Local dashboard
 
@@ -46,21 +93,21 @@ on the same chronological holdout as the median baselines.
 | 42 | 2,270 | 568 | 29.09 min | 23.80 min |
 | 73 | 2,265 | 570 | 18.20 min | 15.41 min |
 
-Both runs used `--hours 336 --patients 1000`. These are synthetic,
-single-split results, not clinical performance claims.
+Both runs used version one with `--hours 336 --patients 1000`. These are
+synthetic, single-split results, not clinical performance claims.
 
 Subgroup diagnostics by hospital and arrival mode are included in the model
-report. The model improves overall MAE on both runs, but some hospital groups
-are slightly worse than the global median. Seed 42's H03 group retains a high
-62.97-minute MAE despite improving on its 79.67-minute baseline. These
-synthetic subgroup results are exploratory.
+report. The model improves overall MAE on both runs, but some hospital
+groups are slightly worse than the global median. Seed 42's H03 group
+retains a high 62.97-minute MAE despite improving on its 79.67-minute
+baseline. These synthetic subgroup results are exploratory.
 
 ## Admission prediction experiments
 
-At arrival, an admission classifier was compared with a baseline that predicts
-the training-set admission rate. Both were evaluated on a chronological
-holdout. Encounters whose departure outcome was unavailable at the split were
-excluded from training.
+At arrival, an admission classifier was compared with a baseline that
+predicts the training-set admission rate. Both were evaluated on a
+chronological holdout. Encounters whose departure outcome was unavailable
+at the split were excluded from training.
 
 | Seed | Eligible train | Test | Prevalence Brier | Arrival model Brier |
 | --- | ---: | ---: | ---: | ---: |
@@ -72,10 +119,10 @@ prevalence baseline on either of these synthetic runs. Triage category is
 unavailable at arrival, so it is not used by that model.
 
 A separate post-triage experiment compares the prevalence baseline, an
-admission-rate baseline for each triage category, and a regularized logistic
-regression using arrival-known features plus triage category. All three use
-the same chronological holdout. Training uses only admission outcomes known
-before the holdout begins.
+admission-rate baseline for each triage category, and a regularized
+logistic regression using arrival-known features plus triage category. All
+three use the same chronological holdout. Training uses only admission
+outcomes known before the holdout begins.
 
 | Seed | Eligible train | Test | Prevalence Brier | Category Brier | Logistic Brier |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -85,22 +132,23 @@ before the holdout begins.
 | 101 | 2,274 | 578 | ~0.23 | ~0.19 | ~0.18 |
 | 202 | 2,268 | 575 | ~0.24 | ~0.19 | ~0.19 |
 
-All five runs used `--hours 336 --patients 1000`. Values marked `~` were
-copied from a PowerShell table that displayed two decimal places. The
-category baseline narrowly beats logistic regression on seeds 42 and 73;
-logistic regression appears better at the displayed precision on seeds 13
-and 101. The rounded seed 202 scores do not establish which is better.
-Both post-triage approaches improve on prevalence in these synthetic runs.
-More validation is needed before selecting a preferred model.
+All five runs used version one with `--hours 336 --patients 1000`.
+Values marked `~` were copied from a PowerShell table that displayed two
+decimal places. The category baseline narrowly beats logistic regression
+on seeds 42 and 73; logistic regression appears better at the displayed
+precision on seeds 13 and 101. The rounded seed 202 scores do not
+establish which is better. Both post-triage approaches improve on
+prevalence in these synthetic runs. More validation is needed before
+selecting a preferred model.
 
 ## Four-hour breach prediction experiment
 
 A four-hour breach means the encounter's arrival-to-departure time exceeds
 240 minutes. The arrival-time baseline predicts the breach rate among
-eligible training encounters. A histogram gradient boosting classifier uses
-only arrival-known features. Both are scored on the same chronological
-holdout using Brier score. A training encounter is eligible only if its
-departure outcome was known before the holdout begins.
+eligible training encounters. A histogram gradient boosting classifier
+uses only arrival-known features. Both are scored on the same
+chronological holdout using Brier score. A training encounter is eligible
+only if its departure outcome was known before the holdout begins.
 
 | Seed | Eligible train | Test | Test breach rate | Baseline Brier | Model Brier |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -110,46 +158,39 @@ departure outcome was known before the holdout begins.
 | 101 | 2,274 | 578 | 0.4308 | 0.2467 | 0.2270 |
 | 202 | 2,268 | 575 | 0.3843 | 0.2381 | 0.2425 |
 
-All five runs used `--hours 336 --patients 1000`. The model beats the
-prevalence baseline on four runs, but is worse on seed 202. The gain on
-seed 73 is small. These repeated synthetic runs come from the same
-simulator; they do not establish performance on real hospital data.
+All five runs used version one with `--hours 336 --patients 1000`. The
+model beats the prevalence baseline on four runs, but is worse on seed
+202. The gain on seed 73 is small. These repeated synthetic runs come from
+the same simulator; they do not establish performance on real hospital
+data.
 
-## Re-presentation data-quality audit
+## Re-presentation data quality
 
-`python -m edflow.representation_audit --run <run-directory>` reports
-overlapping arrivals for the same patient and apparent seven-day returns.
-A follow-up is eligible only when the encounter's departure is at least
-seven days before the observation window ends. Later arrivals are counted
-only when they occur after departure and within seven days.
+The version-one generator independently chooses patient IDs for arrivals.
+Earlier 14-day checks found 104 and 85 overlapping arrivals with a pool of
+1,000 patients (seeds 42 and 73), and 2 and 6 overlaps with a pool of
+40,000 patients. Random ID reuse also changed the apparent return rate
+sharply. Those old rates are not suitable as prediction labels.
 
-| Seed | Patient pool | Encounters | Overlaps | Eligible follow-ups | Apparent returns | Apparent return rate |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| 42 | 1,000 | 2,838 | 104 | 1,405 | 1,077 | 76.65% |
-| 73 | 1,000 | 2,850 | 85 | 1,356 | 1,053 | 77.65% |
-| 42 | 40,000 | 2,893 | 2 | 1,420 | 50 | 3.52% |
-| 73 | 40,000 | 2,832 | 6 | 1,366 | 52 | 3.81% |
+Version two prevents overlapping ED visits in the tested 14-day run. Its
+audit excludes admitted ED departures as index visits because ED departure
+is not an inpatient discharge. It also separates visits with a full
+seven-day follow-up window from visits censored by the end of the run. A
+later arrival counts as an apparent return only when it occurs after
+departure and within seven days.
 
-All four runs cover 336 hours. The generator currently chooses patient IDs
-independently for each arrival. A small patient pool causes frequent ID
-reuse and overlapping visits. A larger pool sharply reduces both, but it
-still produces overlaps. These rates are artifacts of the generator and
-must not be presented as clinically meaningful return rates.
-
-Before building a re-presentation prediction model, patient assignment
-must prevent a new visit while the same patient is still in an encounter.
-A return process should explicitly schedule later visits after departure
-rather than relying on random ID reuse. It must remain reproducible from
-recorded seeds, and labels must exclude encounters without a full seven-day
-follow-up window. Changing the generator will also require rerunning the
-earlier model benchmarks.
+These checks improve the synthetic representation, but do not establish
+clinical validity. Before training a re-presentation model, validate
+version two across more seeds and patient-pool sizes, define the target
+population and prediction point, and rerun earlier model benchmarks on
+version-two data.
 
 ## Planned capabilities
 
-- Redesign patient assignment and evaluate seven-day re-presentation
+- Further validation of version-two generation and seven-day
+  re-presentation labels
 - Broader historical analytics and model validation
 - Expanded dashboard and API
 - Local event streaming and selective, cost-conscious cloud deployment
 
-This is a synthetic portfolio system, not a clinically validated tool or
-medical advice.
+All hospitals, patients, encounters, and results are synthetic.
