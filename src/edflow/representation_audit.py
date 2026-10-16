@@ -20,6 +20,7 @@ def audit_representation(encounters, start_at, hours):
     visits_by_patient = defaultdict(list)
     seen_encounters = set()
     encounter_count = 0
+    excluded_admitted_indices = 0
 
     for row in encounters:
         encounter_id = row["encounter_id"]
@@ -30,21 +31,29 @@ def audit_representation(encounters, start_at, hours):
 
         arrival = _utc(row["arrival_at"])
         departure = _utc(row["departure_at"])
+        status = row["departure_status"]
+        if status not in {"discharged", "admitted"}:
+            raise ValueError("invalid departure status")
         if not start <= arrival < observation_end or departure < arrival:
             raise ValueError("encounter outside observation window or invalid order")
 
-        visits_by_patient[patient_id].append((arrival, departure, encounter_id))
+        visits_by_patient[patient_id].append(
+            (arrival, departure, encounter_id, status)
+        )
         encounter_count += 1
+        if status == "admitted":
+            excluded_admitted_indices += 1
 
     overlapping_arrivals = 0
     eligible_followups = 0
+    censored_followups = 0
     apparent_returns = 0
 
     for visits in visits_by_patient.values():
         visits.sort()
         active_until = None
 
-        for arrival, departure, _ in visits:
+        for arrival, departure, _, _ in visits:
             if active_until is not None and arrival < active_until:
                 overlapping_arrivals += 1
             active_until = (
@@ -52,15 +61,20 @@ def audit_representation(encounters, start_at, hours):
                 else max(active_until, departure)
             )
 
-        for index, (_, departure, _) in enumerate(visits):
+        for index, (_, departure, _, status) in enumerate(visits):
+            # ED departure after admission is not inpatient discharge.
+            if status == "admitted":
+                continue
+
             followup_end = departure + FOLLOWUP
             if followup_end > observation_end:
+                censored_followups += 1
                 continue
 
             eligible_followups += 1
             if any(
                 departure < later_arrival <= followup_end
-                for later_arrival, _, _ in visits[index + 1:]
+                for later_arrival, _, _, _ in visits[index + 1:]
             ):
                 apparent_returns += 1
 
@@ -70,7 +84,8 @@ def audit_representation(encounters, start_at, hours):
         "patients_with_encounters": len(visits_by_patient),
         "overlapping_arrivals": overlapping_arrivals,
         "eligible_seven_day_followups": eligible_followups,
-        "censored_followups": encounter_count - eligible_followups,
+        "censored_followups": censored_followups,
+        "excluded_admitted_indices": excluded_admitted_indices,
         "apparent_seven_day_returns": apparent_returns,
         "apparent_return_rate": (
             round(apparent_returns / eligible_followups, 4)
