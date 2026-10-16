@@ -13,6 +13,10 @@ from .triage import generate_triage_events
 from .snapshots import build_arrival_snapshots
 from .analytics import build_hospital_kpis
 from .model_data import (FEATURE_COLUMNS,TARGET_COLUMNS,build_arrival_training_rows,)
+from .arrival_slots import generate_arrival_slots
+from .encounter_rows import build_encounter_rows
+from .flow_v2 import generate_event_stream_v2
+from .visit_registry import RETURN_WINDOW
 
 
 def utc_datetime(value: str) -> datetime:
@@ -41,10 +45,14 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--hours", type=int, default=24)
     parser.add_argument("--patients", type=int, default=40_000)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--generator-version", type=int, choices=(1, 2), default=1)
+    parser.add_argument("--return-probability", type=float, default=0.1)
     args = parser.parse_args(argv)
 
     if args.hours < 1 or args.patients < 1:
         parser.error("hours and patients must be positive")
+    if not 0 <= args.return_probability <= 1:
+        parser.error("return probability must be between 0 and 1")
     if args.output.exists():
         parser.error(f"output already exists: {args.output}")
 
@@ -53,40 +61,59 @@ def main(argv: list[str] | None = None) -> None:
         seed=args.seed + 1,
         reference_date=args.start.date(),
     )
-    arrivals = generate_arrivals(
-        start_at=args.start,
-        hours=args.hours,
-        hospitals=DEFAULT_HOSPITALS,
-        patient_ids=tuple(patient.patient_id for patient in patients),
-        seed=args.seed,
-    )
-    triages = generate_triage_events(
-        arrivals, patients, seed=args.seed + 2
-    )
-    treatment_events, encounters = simulate_treatment(
-        arrivals,
-        triages,
-        patients,
-        DEFAULT_HOSPITALS,
-        seed=args.seed + 3,
-    )
+    if args.generator_version == 1:
+        arrivals = generate_arrivals(
+            start_at=args.start,
+            hours=args.hours,
+            hospitals=DEFAULT_HOSPITALS,
+            patient_ids=tuple(patient.patient_id for patient in patients),
+            seed=args.seed,
+        )
+        triages = generate_triage_events(
+            arrivals, patients, seed=args.seed + 2
+        )
+        treatment_events, encounters = simulate_treatment(
+            arrivals,
+            triages,
+            patients,
+            DEFAULT_HOSPITALS,
+            seed=args.seed + 3,
+        )
 
-    # A departure frees a space before another treatment starts at
-    # the same timestamp.
-    type_order = {
-        EventType.ARRIVAL: 0,
-        EventType.DEPARTURE: 1,
-        EventType.TRIAGE_COMPLETED: 2,
-        EventType.TREATMENT_STARTED: 3,
-    }
-    events = sorted(
-        [*arrivals, *triages, *treatment_events],
-        key=lambda event: (
-            event.occurred_at,
-            type_order[event.event_type],
-            event.event_id,
-        ),
-    )
+        type_order = {
+            EventType.ARRIVAL: 0,
+            EventType.DEPARTURE: 1,
+            EventType.TRIAGE_COMPLETED: 2,
+            EventType.TREATMENT_STARTED: 3,
+        }
+        events = sorted(
+            [*arrivals, *triages, *treatment_events],
+            key=lambda event: (
+                event.occurred_at,
+                type_order[event.event_type],
+                event.event_id,
+            ),
+        )
+    else:
+        slots = generate_arrival_slots(
+            start_at=args.start,
+            hours=args.hours,
+            hospitals=DEFAULT_HOSPITALS,
+            seed=args.seed,
+        )
+        events = generate_event_stream_v2(
+            slots,
+            patients,
+            DEFAULT_HOSPITALS,
+            seed=args.seed,
+            return_probability=args.return_probability,
+        )
+        arrivals = [
+            event for event in events
+            if event.event_type == EventType.ARRIVAL
+        ]
+        encounters = build_encounter_rows(events)
+
     snapshots = build_arrival_snapshots(events)
 
     encounters.sort(key=lambda row: (row["arrival_at"], row["encounter_id"]))
@@ -185,7 +212,18 @@ def main(argv: list[str] | None = None) -> None:
         "hospital_kpi_count": len(hospital_kpis),
         "daily_kpi_count": len(daily_kpis),
         "training_row_count": len(training_rows),
+        "generator_version": args.generator_version,
     }
+    if args.generator_version == 2:
+        manifest.update({
+            "registry_seed": args.seed + 1,
+            "return_probability_per_arrival_slot": args.return_probability,
+            "return_window_days": RETURN_WINDOW.days,
+            "intentional_return_count": (
+                len(encounters)
+                - len({row["patient_id"] for row in encounters})
+            ),
+        })
     snapshot_fields = (
         "encounter_id",
         "patient_id",
