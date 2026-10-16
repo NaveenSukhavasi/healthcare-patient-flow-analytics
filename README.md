@@ -1,196 +1,79 @@
-# Intelligent Emergency Department Patient Flow Platform
+# Synthetic Emergency Department Patient Flow
 
-A software engineering and data science portfolio project built around fully
-synthetic emergency department (ED) activity at eight fictional
-Victorian-style hospitals. This is not a clinically validated tool or medical
-advice.
+[Open the public dashboard](https://naveensukhavasi.github.io/healthcare-patient-flow-analytics/)
 
-## Current status
+A portfolio project that simulates patient flow across eight fictional emergency departments. It generates timestamped events, encounter and KPI tables, evaluates prediction models, and offers a local streaming and API demo. All records are synthetic. This is not a clinical tool or medical advice.
 
-The project generates linked patient, arrival, triage, treatment-start, and
-departure records. Treatment uses finite ED capacity. Each run writes
-`patients.csv`, `events.jsonl`, `encounters.csv`, `arrival_snapshots.csv`,
-`arrival_training.csv`, `hospital_kpis.csv`, `hospital_daily_kpis.csv`, and
-`manifest.json`.
+## What works
 
-There are two generator versions:
+| Component | Implementation |
+| --- | --- |
+| Simulator | Reproducible Python generator with capacity-limited treatment and version-two, overlap-safe patient assignment |
+| Data checks | Event and encounter tests plus seven-day follow-up, censoring, and overlap audits |
+| Models | Chronological evaluations for waiting time, admission, four-hour breach, and seven-day re-presentation |
+| Local streaming | Apache Kafka in Docker Compose; replay producer and SQLite consumer |
+| Local app | FastAPI endpoints and a React dashboard with generated or streamed events |
+| Public demo | GitHub Pages dashboard built from a generated, read-only JSON snapshot |
+| Verification | Python tests, web build, and container build in GitHub Actions |
 
-- **Version 1 is the default.** It independently chooses a patient ID for
-  each arrival. This preserves the data used for the existing waiting-time,
-  admission, and four-hour breach experiments, but can produce overlapping
-  visits and misleading apparent return rates.
-- **Version 2 is opt-in** with `--generator-version 2`. It assigns patients
-  through a visit registry, permits intentional returns only after ED
-  departure, and prevents a patient from having overlapping ED encounters.
+The public page is a **snapshot**, generated during the Pages workflow. It does not run FastAPI or Kafka in the cloud. Those components work locally. The public deployment uses GitHub Pages and does not require a Google Cloud billing account.
 
-The manifest records the generator version. For version 2, it also records
-the return probability per arrival slot, return window, and number of
-repeated visits. Existing model benchmarks have **not** been rerun on
-version-two data.
+## Run the local app
 
-Arrival snapshots use only events strictly earlier than each arrival. The
-offline training table joins completed outcomes to arrival-known features.
-Its target columns are labels, not predictors.
-
-## Generate and audit a version-two run
-
-From the project folder in PowerShell, using the existing virtual
-environment:
+From the repository folder in PowerShell, with the project's Python virtual environment and Node dependencies installed:
 
 ```powershell
 $env:PYTHONPATH = (Resolve-Path .\src).Path
-$v2Run = "data/generated/flow-v2-14d-$(Get-Date -Format yyyyMMdd-HHmmss)"
-
-.\.venv\Scripts\python.exe -m edflow --output $v2Run --start 2025-01-01T00:00:00+00:00 --hours 336 --patients 40000 --seed 42 --generator-version 2 --return-probability 0.1
-.\.venv\Scripts\python.exe -m edflow.representation_audit --run $v2Run
+$run = "data/generated/demo-$(Get-Date -Format yyyyMMdd-HHmmss)"
+.\.venv\Scripts\python.exe -m edflow --output $run --start 2025-01-01T00:00:00+00:00 --hours 336 --patients 40000 --seed 42 --generator-version 2 --return-probability 0.1 --return-risk-weighting
+$env:EDFLOW_RUN = (Resolve-Path $run).Path
+.\.venv\Scripts\python.exe -m uvicorn edflow.api:create_app --factory --host 127.0.0.1 --port 8000
 ```
 
-The output directory must be new for each run. Omitting
-`--generator-version 2` selects the original version-one generator.
+In a second terminal, run `npm --prefix apps/web run dev`, then open the URL printed by Vite. The development server proxies `/api` to FastAPI. `GET /health` checks the API; `/api/manifest`, `/api/hospitals`, `/api/daily`, `/api/representation`, and `/api/events` provide dashboard data. Stop each server with Ctrl+C.
 
-The 14-day version-two run above produced 2,839 encounters and 11,356
-events. Its audit found:
+Each run writes `patients.csv`, `events.jsonl`, `encounters.csv`, `arrival_snapshots.csv`, `arrival_training.csv`, `hospital_kpis.csv`, `hospital_daily_kpis.csv`, and `manifest.json`. The output directory must be new for each run. Version 1 is still the CLI default to reproduce earlier experiments; select version 2 for valid patient visit assignment and re-presentation work.
 
-| Measure | Result |
-| --- | ---: |
-| Patients with encounters | 2,546 |
-| Overlapping arrivals | 0 |
-| Eligible discharged seven-day follow-ups | 873 |
-| Censored discharged follow-ups | 896 |
-| Admitted ED departures excluded as index visits | 1,070 |
-| Apparent seven-day returns among eligible visits | 217 |
-| Apparent return rate among eligible visits | 24.86% |
+## Reproduce the re-presentation evaluation
 
-The eligible, censored, and admitted groups add up to all 2,839
-encounters. The manifest reports 293 repeated visits across the full run;
-that is a different measure from the 217 eligible seven-day returns. The
-synthetic return process is a generator setting, not a calibrated estimate
-of patient risk. No re-presentation prediction model has been evaluated yet.
+The following 28-day version-two run uses a synthetic chronic-condition-weighted return selection. It is separate from the 14-day public dashboard run.
 
-## Local dashboard
+```powershell
+$env:PYTHONPATH = (Resolve-Path .\src).Path
+$modelRun = "data/generated/model-28d-$(Get-Date -Format yyyyMMdd-HHmmss)"
+.\.venv\Scripts\python.exe -m edflow --output $modelRun --start 2025-01-01T00:00:00+00:00 --hours 672 --patients 40000 --seed 42 --generator-version 2 --return-probability 0.1 --return-risk-weighting
+.\.venv\Scripts\python.exe -m edflow.representation_audit --run $modelRun
+.\.venv\Scripts\python.exe -m edflow.representation_model --run $modelRun
+```
 
-`python -m edflow.dashboard --run <run-directory>` starts a read-only
-dashboard at `http://127.0.0.1:8765/`. It displays run totals, hospital
-KPIs, and daily KPIs with a hospital filter. The server binds to the local
-computer and reads generated files; it does not change them.
+For this configuration, the generator produced 5,762 encounters and 23,048 events. The chronological model evaluation trained on 855 eligible visits, purged 872 pre-split visits whose labels were not yet known, and tested on 936 visits. Its ROC AUC was 0.6072 and average precision 0.2068 versus a prevalence baseline of 0.1549. Its Brier score was **0.1717, worse than the baseline's 0.1416**. The model shows some ranking signal in this synthetic run but is not a better calibrated risk predictor. The exact report is in [docs/representation_model_result.json](docs/representation_model_result.json).
 
-The JSON endpoints are `/health`, `/api/manifest`, `/api/hospitals`, and
-`/api/daily`. The daily endpoint accepts an optional `hospital_id` query
-parameter. Press Ctrl+C in the terminal to stop the server.
+Labels use only discharged index visits with a complete seven-day follow-up window. Admitted ED departures are excluded because this simulator has no inpatient discharge time; incomplete follow-ups are censored. Training uses only labels available before the chronological split. See [data contract](docs/data_contract.md) and [re-presentation design](docs/representation_design.md).
 
-## Waiting-time baseline and model
+## Local Kafka demo
 
-`python -m edflow.baseline --run <run-directory>` evaluates global and
-per-hospital median waiting times on a chronological holdout. A training
-label is used only if treatment started before the test period begins.
+Install `requirements-stream.txt` into the virtual environment, then start Kafka with `docker compose up -d kafka`. Run the consumer in one terminal:
 
-The feature-based model uses only the arrival-time feature allowlist. Its
-encoder and regressor are fitted on eligible training rows, then evaluated
-on the same chronological holdout as the median baselines.
+```powershell
+$env:PYTHONPATH = (Resolve-Path .\src).Path
+.\.venv\Scripts\python.exe -m edflow.streaming consume --topic edflow-events --database data/generated/stream-demo.sqlite --expected 100
+```
 
-| Seed | Eligible train | Test | Global median MAE | Model MAE |
-| --- | ---: | ---: | ---: | ---: |
-| 42 | 2,270 | 568 | 29.09 min | 23.80 min |
-| 73 | 2,265 | 570 | 18.20 min | 15.41 min |
+Replay a generated run in another terminal:
 
-Both runs used version one with `--hours 336 --patients 1000`. These are
-synthetic, single-split results, not clinical performance claims.
+```powershell
+$env:PYTHONPATH = (Resolve-Path .\src).Path
+.\.venv\Scripts\python.exe -m edflow.streaming replay --run 'data/generated/your-run-name' --topic edflow-events --limit 100
+```
 
-Subgroup diagnostics by hospital and arrival mode are included in the model
-report. The model improves overall MAE on both runs, but some hospital
-groups are slightly worse than the global median. Seed 42's H03 group
-retains a high 62.97-minute MAE despite improving on its 79.67-minute
-baseline. These synthetic subgroup results are exploratory.
+Replace `your-run-name` with the generated directory printed by the simulator. Set `EDFLOW_STREAM_DB` to the SQLite file before starting FastAPI to show consumed events in `/api/events`; otherwise the API shows recent events from the generated run. Kafka binds to local port 9092 in `compose.yaml`.
 
-## Admission prediction experiments
+## Other model findings
 
-At arrival, an admission classifier was compared with a baseline that
-predicts the training-set admission rate. Both were evaluated on a
-chronological holdout. Encounters whose departure outcome was unavailable
-at the split were excluded from training.
+The earlier waiting-time, admission, and four-hour breach experiments used version-one data and chronological holdouts. They are not evidence of performance on version-two data or real patients. For seed 42, the waiting-time model reduced mean absolute error from 29.09 to 23.80 minutes; the arrival-time admission model had a worse Brier score than its prevalence baseline (0.2555 versus 0.2429); and the breach model improved Brier score from 0.2534 to 0.2170. Results varied across seeds, including a breach run where the model was worse than baseline. See the code and tests for evaluation details.
 
-| Seed | Eligible train | Test | Prevalence Brier | Arrival model Brier |
-| --- | ---: | ---: | ---: | ---: |
-| 42 | 2,249 | 568 | 0.2429 | 0.2555 |
-| 73 | 2,237 | 570 | 0.2366 | 0.2470 |
+## Public deployment and verification
 
-Lower Brier scores are better. The arrival-time model did not beat the
-prevalence baseline on either of these synthetic runs. Triage category is
-unavailable at arrival, so it is not used by that model.
+The [Pages workflow](.github/workflows/pages.yml) generates a deterministic version-two run, exports only dashboard JSON, builds React in static mode, and publishes `apps/web/dist` whenever `main` is pushed. The public snapshot contains no patient-level demographics. The [CI workflow](.github/workflows/ci.yml) runs Python tests, builds the web app, and builds the container. The latest local verification before deployment passed 62 Python tests and the React production build.
 
-A separate post-triage experiment compares the prevalence baseline, an
-admission-rate baseline for each triage category, and a regularized
-logistic regression using arrival-known features plus triage category. All
-three use the same chronological holdout. Training uses only admission
-outcomes known before the holdout begins.
-
-| Seed | Eligible train | Test | Prevalence Brier | Category Brier | Logistic Brier |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| 42 | 2,249 | 568 | 0.2429 | 0.2041 | 0.2044 |
-| 73 | 2,237 | 570 | 0.2366 | 0.1749 | 0.1800 |
-| 13 | 2,224 | 566 | ~0.24 | ~0.19 | ~0.18 |
-| 101 | 2,274 | 578 | ~0.23 | ~0.19 | ~0.18 |
-| 202 | 2,268 | 575 | ~0.24 | ~0.19 | ~0.19 |
-
-All five runs used version one with `--hours 336 --patients 1000`.
-Values marked `~` were copied from a PowerShell table that displayed two
-decimal places. The category baseline narrowly beats logistic regression
-on seeds 42 and 73; logistic regression appears better at the displayed
-precision on seeds 13 and 101. The rounded seed 202 scores do not
-establish which is better. Both post-triage approaches improve on
-prevalence in these synthetic runs. More validation is needed before
-selecting a preferred model.
-
-## Four-hour breach prediction experiment
-
-A four-hour breach means the encounter's arrival-to-departure time exceeds
-240 minutes. The arrival-time baseline predicts the breach rate among
-eligible training encounters. A histogram gradient boosting classifier
-uses only arrival-known features. Both are scored on the same
-chronological holdout using Brier score. A training encounter is eligible
-only if its departure outcome was known before the holdout begins.
-
-| Seed | Eligible train | Test | Test breach rate | Baseline Brier | Model Brier |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| 42 | 2,249 | 568 | 0.4613 | 0.2534 | 0.2170 |
-| 73 | 2,237 | 570 | 0.4070 | 0.2414 | 0.2382 |
-| 13 | 2,224 | 566 | 0.4470 | 0.2484 | 0.2198 |
-| 101 | 2,274 | 578 | 0.4308 | 0.2467 | 0.2270 |
-| 202 | 2,268 | 575 | 0.3843 | 0.2381 | 0.2425 |
-
-All five runs used version one with `--hours 336 --patients 1000`. The
-model beats the prevalence baseline on four runs, but is worse on seed
-202. The gain on seed 73 is small. These repeated synthetic runs come from
-the same simulator; they do not establish performance on real hospital
-data.
-
-## Re-presentation data quality
-
-The version-one generator independently chooses patient IDs for arrivals.
-Earlier 14-day checks found 104 and 85 overlapping arrivals with a pool of
-1,000 patients (seeds 42 and 73), and 2 and 6 overlaps with a pool of
-40,000 patients. Random ID reuse also changed the apparent return rate
-sharply. Those old rates are not suitable as prediction labels.
-
-Version two prevents overlapping ED visits in the tested 14-day run. Its
-audit excludes admitted ED departures as index visits because ED departure
-is not an inpatient discharge. It also separates visits with a full
-seven-day follow-up window from visits censored by the end of the run. A
-later arrival counts as an apparent return only when it occurs after
-departure and within seven days.
-
-These checks improve the synthetic representation, but do not establish
-clinical validity. Before training a re-presentation model, validate
-version two across more seeds and patient-pool sizes, define the target
-population and prediction point, and rerun earlier model benchmarks on
-version-two data.
-
-## Planned capabilities
-
-- Further validation of version-two generation and seven-day
-  re-presentation labels
-- Broader historical analytics and model validation
-- Expanded dashboard and API
-- Local event streaming and selective, cost-conscious cloud deployment
-
-All hospitals, patients, encounters, and results are synthetic.
+This project is a software and data-science demonstration. Its hospital settings, return process, and model results are illustrative, not calibrated to real healthcare data. The static site is suitable for a no-billing portfolio demo; it is not a hosted streaming service.

@@ -1,0 +1,22 @@
+{
+  "return_selection": "chronic_condition_weighted_v1",
+  "split_at_utc": "2025-01-15T00:00:00+00:00",
+  "training_rows": 855,
+  "purged_pre_split_rows": 872,
+  "test_rows": 936,
+  "latest_training_label_at_utc": "2025-01-14T23:56:40+00:00",
+  "earliest_test_departure_at_utc": "2025-01-15T00:13:24+00:00",
+  "training_return_rate": 0.2585,
+  "test_return_rate": 0.1549,
+  "encoded_feature_count": 20,
+  "baseline": {
+    "brier_score": 0.1416,
+    "roc_auc": 0.5,
+    "average_precision": 0.1549
+  },
+  "model": {
+    "brier_score": 0.1717,
+    "roc_auc": 0.6072,
+    "average_precision": 0.2068
+  }
+}

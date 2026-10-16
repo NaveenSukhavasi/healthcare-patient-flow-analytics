@@ -43,8 +43,10 @@ Version two is selected with `--generator-version 2`.
    visit. Record the generator version and return settings in the
    run manifest.
 
-The probability is a synthetic arrival-slot setting. It is not an
-individual patient's clinical risk. An admitted patient's ED
+The probability is a synthetic arrival-slot setting. With
+`--return-risk-weighting`, eligible return candidates are selected using
+synthetic chronic-condition count. Neither mode represents an individual's
+calibrated clinical risk. An admitted patient's ED
 departure is not an inpatient discharge, so admission does not make
 that patient eligible for a generated return.
 
@@ -96,27 +98,30 @@ this configuration. It establishes that the tested scenario has no
 overlapping ED encounters. It does not establish that its return
 rate represents real patients.
 
-## Checks completed and work remaining
+## Additional checks and model evaluation
 
 Implemented checks cover chronological event generation, patient
 assignment without overlapping visits, return eligibility after
 departure, pool exhaustion, repeatability from seeds, encounter-row
 construction, seven-day follow-up boundaries, and CLI output. The
 existing waiting-time, admission, breach, and dashboard tests also
-pass with the version-two code present.
+pass with the version-two code present. Additional 14-day audits with
+seeds 13 and 73 found zero overlapping arrivals. A 40,000-patient run
+with return probability zero had zero apparent returns; raising the
+probability to 0.05 produced 117 eligible apparent returns. These are
+synthetic sensitivity checks, not calibration to observed patients.
 
-Before using re-presentation as a modelling target:
+The 28-day weighted version-two evaluation uses ED departure as the
+prediction point. It excludes admitted and censored visits, purges
+pre-split visits whose seven-day labels were not known at the split,
+and compares a classifier with a training-prevalence baseline on later
+visits. With seed 42 it trained on 855 visits, purged 872, and tested
+on 936. The classifier reached ROC AUC 0.6072 but Brier score 0.1717,
+worse than baseline Brier score 0.1416. The full report is in
+`representation_model_result.json`.
 
-- Repeat the full audit across more seeds, patient-pool sizes, and
-  return-probability settings.
-- Review whether the synthetic return process produces useful,
-  plausible variation rather than a rate dominated by its setting.
-- Define the prediction point, target population, and which patient
-  history is available at that point.
-- Keep censored follow-ups and admitted ED departures out of confirmed
-  negative labels.
-- Train only on labels known before a chronological holdout begins.
-- Rerun and document the earlier waiting-time, admission, and
-  four-hour breach benchmarks on version-two data.
-
-No re-presentation prediction model has been evaluated yet.
+This model is experimental. Its synthetic return process is not
+clinically calibrated, its probabilistic accuracy did not beat baseline
+in this run, and the older waiting-time, admission, and breach
+benchmarks still need re-evaluation on version-two data before any
+cross-version comparison.

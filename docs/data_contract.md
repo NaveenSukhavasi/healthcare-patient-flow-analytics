@@ -1,9 +1,8 @@
 # Emergency Department Data and Event Contract
 
-Status: local synthetic patient-flow generators, dashboard, and offline
-waiting-time, admission, and four-hour breach experiments are implemented.
-Generator version 2 is opt-in. Deployment and re-presentation prediction
-remain planned.
+Status: synthetic patient-flow generators, local Kafka streaming, API,
+React dashboard, offline prediction experiments, and a public GitHub Pages
+snapshot are implemented. Generator version 2 remains opt-in.
 
 All hospitals, patients, and encounters in this project are synthetic.
 Store event timestamps in UTC. Derive Victorian local time from
@@ -24,8 +23,9 @@ departure. If the patient pool cannot support an arrival, generation
 fails rather than assigning an active patient.
 
 The version-two return probability applies to an arrival slot when an
-eligible discharged patient exists. It is a synthetic generator setting,
-not a calibrated patient-level probability.
+eligible discharged patient exists. `--return-risk-weighting` biases the
+selection among eligible patients using synthetic chronic-condition count.
+Neither setting is a calibrated patient-level probability.
 
 ## Core records
 
@@ -153,8 +153,12 @@ and seeds.
 
 The existing waiting-time, admission, and breach benchmarks use
 version-one data. They must be rerun before making claims about model
-performance on version-two data. No re-presentation prediction model
-has been evaluated yet.
+performance on version-two data. The version-two re-presentation model
+uses a chronological split, trains only on labels available before that
+split, and is evaluated against a prevalence baseline. Its 28-day
+synthetic evaluation is reported in `representation_model_result.json`;
+its Brier score is worse than baseline. None of these models is
+clinically validated.
 
 These synthetic labels and demographic results are not clinically
 validated and must not be presented as real hospital performance.
