@@ -5,8 +5,7 @@ import pytest
 from edflow.arrivals import DEFAULT_HOSPITALS, generate_arrivals
 from edflow.events import EventType
 from edflow.patients import generate_patients
-from edflow.triage import generate_triage_events
-
+from edflow.triage import TriageSampler, generate_triage_events
 
 START = datetime(2025, 1, 1, tzinfo=timezone.utc)
 
@@ -61,3 +60,19 @@ def test_missing_patient_is_rejected():
 
     with pytest.raises(ValueError, match="unknown patient"):
         generate_triage_events(arrivals, patients[:1], seed=13)
+
+def test_incremental_triage_matches_batch():
+    patients, arrivals = sample_data()
+    patient_by_id = {patient.patient_id: patient for patient in patients}
+    sampler = TriageSampler(seed=13)
+
+    incremental = [
+        sampler.sample(arrival, patient_by_id[arrival.patient_id])
+        for arrival in arrivals
+    ]
+    batch = generate_triage_events(arrivals, patients, seed=13)
+
+    assert sorted(
+        (event.to_record() for event in incremental),
+        key=lambda record: (record["occurred_at"], record["event_id"]),
+    ) == [event.to_record() for event in batch]

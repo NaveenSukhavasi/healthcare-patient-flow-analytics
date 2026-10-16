@@ -6,33 +6,17 @@ from .events import EDEvent, EventType
 from .patients import Patient
 
 
-def generate_triage_events(
-    arrivals: Sequence[EDEvent],
-    patients: Sequence[Patient],
-    *,
-    seed: int,
-) -> list[EDEvent]:
-    """Create one later triage event for each arrival."""
+class TriageSampler:
+    """Keep one random stream across successive arrivals."""
 
-    arrivals = tuple(arrivals)
-    patients = tuple(patients)
-    patient_by_id = {patient.patient_id: patient for patient in patients}
+    def __init__(self, *, seed: int) -> None:
+        self._rng = Random(seed)
 
-    if len(patient_by_id) != len(patients):
-        raise ValueError("patient IDs must be unique")
-    if len({event.event_id for event in arrivals}) != len(arrivals):
-        raise ValueError("arrival event IDs must be unique")
-
-    rng = Random(seed)
-    triage_events = []
-
-    for arrival in arrivals:
+    def sample(self, arrival: EDEvent, patient: Patient) -> EDEvent:
         if arrival.event_type != EventType.ARRIVAL:
-            raise ValueError("input must contain arrival events only")
-
-        patient = patient_by_id.get(arrival.patient_id)
-        if patient is None:
-            raise ValueError(f"unknown patient: {arrival.patient_id}")
+            raise ValueError("input must be an arrival event")
+        if arrival.patient_id != patient.patient_id:
+            raise ValueError("patient does not match arrival")
 
         age = patient.age_on(arrival.occurred_at.date())
         ambulance = arrival.payload["arrival_mode"] == "ambulance"
@@ -42,12 +26,12 @@ def generate_triage_events(
             if ambulance
             else (1, 8, 35, 45, 11)
         )
-        category = rng.choices(
+        category = self._rng.choices(
             (1, 2, 3, 4, 5),
             weights=category_weights,
         )[0]
 
-        if patient.chronic_condition_count >= 3 and rng.random() < 0.20:
+        if patient.chronic_condition_count >= 3 and self._rng.random() < 0.20:
             category = max(1, category - 1)
 
         groups = (
@@ -62,29 +46,53 @@ def generate_triage_events(
             if age >= 65
             else (18, 32, 8, 20, 22)
         )
-        presentation_group = rng.choices(
+        presentation_group = self._rng.choices(
             groups,
             weights=group_weights,
         )[0]
 
         triage_at = arrival.occurred_at + timedelta(
-            minutes=rng.randint(3, 15)
+            minutes=self._rng.randint(3, 15)
         )
 
-        triage_events.append(
-            EDEvent(
-                event_id=f"{arrival.event_id}-T",
-                encounter_id=arrival.encounter_id,
-                patient_id=arrival.patient_id,
-                hospital_id=arrival.hospital_id,
-                occurred_at=triage_at,
-                event_type=EventType.TRIAGE_COMPLETED,
-                payload={
-                    "triage_category": category,
-                    "presentation_group": presentation_group,
-                },
-            )
+        return EDEvent(
+            event_id=f"{arrival.event_id}-T",
+            encounter_id=arrival.encounter_id,
+            patient_id=arrival.patient_id,
+            hospital_id=arrival.hospital_id,
+            occurred_at=triage_at,
+            event_type=EventType.TRIAGE_COMPLETED,
+            payload={
+                "triage_category": category,
+                "presentation_group": presentation_group,
+            },
         )
+
+
+def generate_triage_events(
+    arrivals: Sequence[EDEvent],
+    patients: Sequence[Patient],
+    *,
+    seed: int,
+) -> list[EDEvent]:
+    """Create one later triage event for each arrival."""
+    arrivals = tuple(arrivals)
+    patients = tuple(patients)
+    patient_by_id = {patient.patient_id: patient for patient in patients}
+
+    if len(patient_by_id) != len(patients):
+        raise ValueError("patient IDs must be unique")
+    if len({event.event_id for event in arrivals}) != len(arrivals):
+        raise ValueError("arrival event IDs must be unique")
+
+    sampler = TriageSampler(seed=seed)
+    triage_events = []
+
+    for arrival in arrivals:
+        patient = patient_by_id.get(arrival.patient_id)
+        if patient is None:
+            raise ValueError(f"unknown patient: {arrival.patient_id}")
+        triage_events.append(sampler.sample(arrival, patient))
 
     return sorted(
         triage_events,
