@@ -1,12 +1,12 @@
 import heapq
 from datetime import timedelta
 from itertools import count
-from random import Random
 from typing import Sequence
 
 from .arrivals import Hospital
 from .events import EDEvent, EventType
 from .patients import Patient
+from .treatment_outcomes import TreatmentOutcomeSampler
 
 
 def simulate_treatment(
@@ -57,7 +57,7 @@ def simulate_treatment(
         if arrival.hospital_id not in hospital_by_id:
             raise ValueError("unknown hospital")
 
-    rng = Random(seed)
+    outcomes = TreatmentOutcomeSampler(seed=seed)
     sequence = count()
     schedule = []
 
@@ -148,29 +148,10 @@ def simulate_treatment(
                 treating[hospital_id].add(encounter_id)
                 started_at[encounter_id] = current_time
 
-                age = patient.age_on(arrival.occurred_at.date())
-                base_admission = (0.85, 0.68, 0.38, 0.13, 0.05)[
-                    category - 1
-                ]
-                admission_probability = min(
-                    0.97,
-                    base_admission
-                    + 0.08 * (age >= 75)
-                    + 0.04 * patient.chronic_condition_count,
-                )
-                admitted = rng.random() < admission_probability
-
-                base_minutes = (300, 225, 165, 105, 65)[category - 1]
-                duration_minutes = max(
-                    20,
-                    round(
-                        rng.gauss(
-                            base_minutes
-                            + (100 if admitted else 0)
-                            + 12 * patient.chronic_condition_count,
-                            30,
-                        )
-                    ),
+                outcome = outcomes.sample(
+                    patient,
+                    triage_category=category,
+                    arrival_at=arrival.occurred_at,
                 )
 
                 departure = EDEvent(
@@ -179,13 +160,11 @@ def simulate_treatment(
                     patient_id=arrival.patient_id,
                     hospital_id=hospital_id,
                     occurred_at=current_time + timedelta(
-                        minutes=duration_minutes
+                        minutes=outcome.duration_minutes
                     ),
                     event_type=EventType.DEPARTURE,
                     payload={
-                        "departure_status": (
-                            "admitted" if admitted else "discharged"
-                        )
+                        "departure_status": outcome.departure_status
                     },
                 )
                 heapq.heappush(
