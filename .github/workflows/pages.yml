@@ -1,0 +1,51 @@
+name: Publish demo on GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.publish.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22.19.0'
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Generate synthetic data and export dashboard snapshot
+        env:
+          PYTHONPATH: src
+        run: |
+          python -m edflow --output generated-demo --start 2025-01-01T00:00:00+00:00 --hours 336 --patients 40000 --seed 42 --generator-version 2 --return-probability 0.1 --return-risk-weighting
+          python -m edflow.export_static --run generated-demo --out apps/web/public/demo
+      - name: Build dashboard
+        working-directory: apps/web
+        env:
+          VITE_STATIC_DEMO: '1'
+        run: |
+          npm ci
+          npm run build
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: apps/web/dist
+      - uses: actions/deploy-pages@v4
+        id: publish

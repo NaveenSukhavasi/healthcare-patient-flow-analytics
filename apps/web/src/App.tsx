@@ -43,6 +43,10 @@ type EventRecord = {
   event_type: string
 }
 
+const staticDemo = import.meta.env.VITE_STATIC_DEMO === '1'
+const dataUrl = (name: string) =>
+  staticDemo ? `${import.meta.env.BASE_URL}demo/${name}.json` : `/api/${name}`
+
 async function getJson<T>(path: string): Promise<T> {
   const response = await fetch(path)
   if (!response.ok) throw new Error(`${path}: HTTP ${response.status}`)
@@ -66,10 +70,10 @@ function App() {
 
   useEffect(() => {
     Promise.all([
-      getJson<Manifest>('/api/manifest'),
-      getJson<Hospital[]>('/api/hospitals'),
-      getJson<Daily[]>('/api/daily'),
-      getJson<Representation>('/api/representation'),
+      getJson<Manifest>(dataUrl('manifest')),
+      getJson<Hospital[]>(dataUrl('hospitals')),
+      getJson<Daily[]>(dataUrl('daily')),
+      getJson<Representation>(dataUrl('representation')),
     ])
       .then(([run, hospitalRows, dailyRows, audit]) => {
         setManifest(run)
@@ -80,11 +84,12 @@ function App() {
       .catch((cause: unknown) => setError(String(cause)))
 
     const refreshEvents = () => {
-      getJson<EventRecord[]>('/api/events?limit=12')
+      getJson<EventRecord[]>(staticDemo ? dataUrl('events') : '/api/events?limit=12')
         .then(setEvents)
         .catch((cause: unknown) => setError(String(cause)))
     }
     refreshEvents()
+    if (staticDemo) return
     const timer = window.setInterval(refreshEvents, 3000)
     return () => window.clearInterval(timer)
   }, [])
@@ -188,7 +193,7 @@ function App() {
 
           <section className="panel">
             <p className="eyebrow">EVENTS</p>
-            <h2>Latest streamed events</h2>
+            <h2>{staticDemo ? 'Recent generated events' : 'Recent events'}</h2>
             <div className="event-list">
               {events.map((event) => (
                 <div className="event" key={event.event_id}>
